@@ -1,154 +1,72 @@
 # LincolnLens
 
-LincolnLens turns a person’s life into a coverage plan they can see and change. It asks plain questions, shows what each dollar is for, and lets them ask follow-ups in the same conversation.
+**Life’s unpredictable. Your plan doesn’t have to be.**
 
-The coverage math is fixed and inspectable. The model only reads what someone types and explains it. It never invents a coverage number.
+LincolnLens is a conversational life insurance planning prototype. Describe your household, see the financial needs behind a coverage estimate, and explore how that estimate changes as life changes.
 
-This is an educational estimate, not a quote, underwriting decision, or financial advice.
+The app shows what the money is intended to cover: the home, income support, debts, education, childcare, and immediate costs. You can change the inputs, compare coverage amounts, and take a plain-text summary to a licensed professional.
 
-## What it does
+**The language model reads and explains. JavaScript calculates the plan.**
 
-- Opens on a full-page welcome screen (`family.png`) with **Build my plan** and **Continue your last plan**.
-- Walks through one guided conversation: household, needs, protection, family, then what-if scenarios.
-- Builds the plan live in a side panel. Every row can be opened to see why that number is there.
-- Accepts a sentence instead of the questionnaire (“I’m 34, married, two kids, $85k, $240k mortgage”).
-- Lets someone type in the composer at any step. Enter sends the message.
-- Suggests questions that match the current step, and does not repeat ones already asked.
-- Saves plans in this browser only. Health answers are never saved.
-- Shows **Behind the numbers**: the inputs, the assumptions, and a log of what the model did.
+This repository is named **Life-LensV2**; the current interface uses **LincolnLens**. Estimates, premiums, health classes, and cash-value projections are educational illustrations—not quotes, underwriting decisions, or financial advice.
 
-### Conversation stages
+[Quick start](#quick-start) · [Model setup](#connecting-a-language-model) · [Architecture](#architecture) · [Calculations](#how-coverage-is-calculated) · [Privacy](#data-and-privacy) · [Troubleshooting](#deployment-and-troubleshooting)
 
-| Stage | What you learn |
-|---|---|
-| You | Who depends on you, ages, income, what matters most |
-| Your needs | Home, mortgage, income years, debts, school, childcare, savings, coverage you already have |
-| Protection | The gap, a coverage slider, a year-by-year timeline, term vs whole life, a price class if health is shared, a policy card |
-| Family | A second plan if a partner depends on the household |
-| Explore | Planned changes and sudden changes, plus a summary you can copy or download |
+## What you can do
 
-Coverage choices are three rounded amounts from the engine: essential, balanced, and more.
+- **Start with a sentence or one question at a time.** Review the facts extracted from your description, then choose a quick path or a guided walkthrough.
+- **Watch the plan take shape.** A live panel separates financial needs from savings and existing coverage, with explanations for individual line items.
+- **Explore different amounts.** Compare essential, balanced, and additional-cushion targets; move a coverage slider to see which goals are funded.
+- **See the plan over time.** Inspect a year-by-year funding timeline, compare term and whole life, and explore a term-policy ladder when the engine offers one.
+- **Include your partner’s contribution.** Build a second needs estimate covering income, childcare, household work, and family care where applicable.
+- **Ask questions and make changes in conversation.** Update facts, open a plan card, change coverage, or launch a supported scenario from the composer.
+- **Inspect the reasoning.** **Behind the numbers** exposes calculations, adjustable assumptions, AI activity, and a demonstration of the dollar-figure check.
+- **Save and take your plan with you.** Resume browser-saved plans, copy or download a `.txt` summary, and generate an optional advisor brief. No account is required.
 
-Scenarios include a new baby, a home, a raise, a job change, paying off debt, more savings, a partner stopping work, job loss, illness, a market drop, a surprise bill, faster inflation, and a parent who needs support.
+### The guided journey
 
-## How the pieces fit
+Questions and cards appear according to the household’s answers; not everyone sees every step.
 
-```mermaid
-flowchart LR
-  Browser["Browser"] --> Page["LincolnLens page"]
-  Page --> Engine["Coverage engine<br/>src/engine.js"]
-  Page --> API["POST /api/complete"]
-  API --> Proxy["server.py"]
-  Proxy --> Config["llm.config.json"]
-  Config --> Local["Local model<br/>127.0.0.1:8000"]
-  Config --> Modal["Modal endpoint"]
-  Engine --> Panel["Plan, timeline, premiums"]
-  Proxy --> Guard["Dollar check"]
-  Guard --> Page
-```
+| Stage | What happens |
+| --- | --- |
+| **You** | Establish household, children’s ages, income, age, and priorities. |
+| **Your needs** | Choose mortgage support, income duration, debts, education, childcare, immediate costs, savings to use, and existing coverage. |
+| **Protection** | Explore the gap, coverage amounts, timeline, policy types, and illustrative premiums. Health questions are optional. |
+| **Family** | Examine the partner’s financial contribution and a separate coverage estimate when relevant. |
+| **Explore** | Compare life changes and financial shocks, then prepare a summary. |
 
-The page calculates. `server.py` only forwards words to whichever model `llm.config.json` selects, then strips `<think>…</think>` from the reply.
+The quick path applies editable defaults to selected unanswered questions. These are assumptions made by the application, not additional facts extracted from the user.
 
-```mermaid
-sequenceDiagram
-  participant Person
-  participant Page
-  participant Engine
-  participant Proxy as server.py
-  participant Model
-  Person->>Page: Answer or ask a question
-  Page->>Engine: Update profile and recompute
-  Engine-->>Page: Need, gap, tiers, timeline
-  Page->>Proxy: POST /api/complete
-  Proxy->>Model: OpenAI chat completion
-  Model-->>Proxy: Text or JSON
-  Proxy-->>Page: text, with thinking removed
-  Page->>Page: Keep only dollar figures the engine already produced
-  Page-->>Person: Reply, updated plan, next question
-```
+### What-if scenarios
 
-## Where AI is used
+| Planned changes | Financial shocks |
+| --- | --- |
+| A baby; a new or larger home; a raise; changing jobs; paying off debt; building savings; a partner stopping work | Job loss; illness or injury; falling investments; an unexpected bill; lower growth above inflation; supporting a parent |
 
-The model is reached through `window.claude` in `src/client.js`. That shim posts to `/api/complete`. `server.py` reads `llm.config.json` on every request and calls the active endpoint.
+Scenario previews use a copy of the profile and assumptions. Users can compare scenarios or explicitly apply a change. The illness and job-loss scenarios model the effect on savings, debts, and the subsequent coverage gap; they do not simulate a life insurance payout for those events.
 
-If no model answers, LincolnLens keeps going with built-in readers and canned explanations. The numbers do not change.
+## Quick start
 
-| Job | What the model does | What it must not do |
-|---|---|---|
-| Read a sentence | Pull age, household, kids, income, mortgage, debts, savings into JSON. Unknown fields stay null. | Guess a “typical” income or family |
-| Answer the open question | Map a typed reply onto the widget that is waiting (an option, an amount, ages) | Skip ahead or invent an answer |
-| Chat | Reply in 1–4 plain sentences and, when asked, return one action: update a field, change the policy, try a coverage amount, show a card, run a scenario, share health, or start a new plan | Calculate a new dollar amount |
-| Explain the plan | Walk through the pieces the engine already listed | Add figures that are not in the plan |
-| Three things I noticed | Pick up to three observations from candidates the app already found | Invent a gap or a premium |
-| Advisor brief | Write a short brief from the current facts | Replace the plan math |
-| Suggested questions | Propose up to three short questions about this moment | Repeat a question already asked, or include a dollar amount |
-| Photo of a document | Read a benefits page, policy page, or mortgage statement into JSON | Run unless a vision model is connected |
+Suggested environment: **Node.js 22+**, **npm**, and **Python 3.10+**. A model endpoint is optional for trying the guided calculator and built-in responses. Model failures fall back to local parsing or prepared explanations, although a slow endpoint can delay that fallback.
 
-Every model reply that shows dollars passes `guard()` in `src/engine.js`. A dollar figure is kept only when it matches a number the engine already computed (need, gap, tiers, premiums, savings, and so on). Anything else is marked so it is not presented as part of the plan.
-
-Chat rules live in `QA_RULES` inside `src/ai.js`:
-
-- Use only dollar figures from the plan, written the same way.
-- For general insurance questions, answer in words. Do not mint new dollar amounts.
-- Say “if you weren’t here” rather than “death” or “die”.
-- If the person needs a lawyer, tax advisor, doctor, or a real quote, say so.
-- If a message looks like a crisis, the app responds with care and points to 988 in the US. It does not discuss how policies treat suicide.
-
-### What the proxy sends
-
-Both local and Modal get the same body:
-
-- `temperature`: 0.3
-- `max_tokens`: 2048
-- `top_p`: 0.9
-- `stream`: false
-- `reasoning_effort`: `"none"`
-
-`server.py` adds `Authorization: Bearer <key>` only when that backend’s `key` is non-empty. Do not put the word `Bearer` in the config.
-
-JSON tasks get an extra system line: reply with one JSON object, no markdown.
-
-### Photo reading
-
-`photoFlow()` can send an image to a vision model. The current `/api/complete` bridge reports no image support, so the photo button stays hidden. A text model does not gain vision by being connected. Point the endpoint at a vision-capable model and report image support from `limits()` before that button appears.
-
-## Project layout
-
-| Path | Role |
-|---|---|
-| `index.html` | Landing page and app shell |
-| `family.png` | Landing photo |
-| `src/styles.css` | Landing crop, type, and the rest of the UI |
-| `src/engine.js` | All coverage, timeline, premium, and price-class math |
-| `src/flow.js` | Questions, cards, and scenarios |
-| `src/ai.js` | Prompts, chat actions, suggestions, number guard on replies |
-| `src/client.js` | Browser bridge to `/api/complete` |
-| `src/hero.js` | Landing, saved plans, composer |
-| `src/ui.js` | Chat widgets and the plan panel |
-| `src/state.js` | Profile, assumptions, public source links |
-| `server.py` | Serves `dist/` and proxies the model |
-| `llm.config.json` | `local` or `modal`. Not committed when it holds a key |
-| `dist/` | What `server.py` actually serves. Rebuild after UI or photo changes |
-
-Assumptions the engine starts with: replace 75% of income, and grow money 3% a year above inflation. Both can be changed under **Behind the numbers**. Work coverage counts unless you turn that off.
-
-Public links used in explanations: NAIC life-insurance consumer guide, Insurance Information Institute life-insurance basics, and Social Security survivors and disability pages.
-
-## Run it locally
-
-You need Node 20+, Python 3.10+, and a model server on port 8000 (or a reachable Modal URL).
+### 1. Install and build
 
 ```bash
-cd lifelensV2
+git clone https://github.com/dineth99-bit/Life-LensV2.git
+cd Life-LensV2
 npm ci
 npm run build
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-Create `llm.config.json` in the project root (it is gitignored):
+On Windows, use `python -m venv .venv` and activate it with `.venv\Scripts\Activate.ps1` in PowerShell.
+
+### 2. Review the model configuration
+
+The active configuration is `llm.config.json` in the repository root. For a local setup with no credentials, use:
 
 ```json
 {
@@ -159,82 +77,227 @@ Create `llm.config.json` in the project root (it is gitignored):
     "key": ""
   },
   "modal": {
-    "url": "https://your-modal-host/v1/chat/completions",
+    "url": "",
     "model": "Qwen/Qwen3.5-9B",
     "key": ""
   }
 }
 ```
 
-Start the model, then the site.
+The model name above is the proxy’s default. Use the exact model ID served by your endpoint; the repository does not install or launch a model server.
+
+**Credential handling:** `llm.config.json` is currently tracked by Git even though `.gitignore` lists it. Ignoring an already tracked file does not protect later edits. Remove it from tracking before storing credentials (`git rm --cached llm.config.json` keeps the local file), commit that removal, and keep any shared example free of secrets. Revoke or rotate credentials that have already been committed; deleting the current file does not remove earlier copies.
+
+If the file is missing or cannot be parsed, `server.py` falls back to its local defaults. `llm.local.json` is ignored by Git but is not read by this server.
+
+### 3. Start the application
 
 ```bash
-# GPU machine, OpenAI-compatible server. Example with vLLM:
-vllm serve Qwen/Qwen3.5-9B \
-  --host 127.0.0.1 \
-  --port 8000 \
-  --gpu-memory-utilization 0.90 \
-  --max-model-len 16384 \
-  --reasoning-parser qwen3
-
-# second terminal
-source .venv/bin/activate
 python server.py
 ```
 
-Open `http://127.0.0.1:3020`.
+Open **[http://127.0.0.1:3020](http://127.0.0.1:3020)**.
 
-While editing the UI, keep `server.py` running and use the Vite dev server. It proxies `/api` to port 3020:
+The server serves the built `dist/` directory and handles model requests. It listens on `0.0.0.0:3020`; it is not restricted to localhost. To bind only to localhost instead:
+
+```bash
+python -m uvicorn server:app --host 127.0.0.1 --port 3020
+```
+
+### 4. Try the included example
+
+Choose **Build my plan**, then **Try a young family**. Review the extracted facts, continue through the plan, move the coverage slider, and open **Behind the numbers**. In **Explore**, compare a scenario and choose **Put my plan together** to copy or download the summary.
+
+### Frontend development
+
+Keep the Python server running, then start Vite in a second terminal:
 
 ```bash
 npm run dev
 ```
 
-That serves the source on `http://127.0.0.1:5174`. The copy on port 3020 is `dist/`, so production changes show up only after `npm run build`.
+Vite requests port **5174** and proxies `/api` to **3020**. Use the URL printed in the terminal if that port is already occupied. Changes to source files appear through Vite; rebuild with `npm run build` to update the copy served by Python.
 
-Switching models does not need a restart. Change `"backend"` to `"local"` or `"modal"` and save. The next chat request uses the new block.
+`npm run preview` previews the built frontend, normally on port **4173**. With the repository’s Vite configuration, preview inherits the `/api` proxy to **3020**, so keep the Python server running for AI features there too.
 
-To use Modal, set `"backend": "modal"`, put the full chat-completions URL in `modal.url`, and put the token in `modal.key` with no `Bearer` prefix. The host running `server.py` must be able to open that URL. A TLS reset from one network does not mean the token is wrong.
+## Connecting a language model
 
-Check the active model:
+`server.py` reads `llm.config.json` for each request, so switching the active block does not require a restart.
+
+| Setting | Meaning |
+| --- | --- |
+| `backend` | Selects `local` or `modal`. There is no automatic failover between them. |
+| `url` | Full OpenAI-style chat-completions URL, including `/v1/chat/completions` where required by the provider. |
+| `model` | Model ID expected by the selected endpoint. |
+| `key` | Optional token. The server adds `Authorization: Bearer <key>`; enter only the token. |
+
+For a hosted model, set `backend` to `modal` and fill in that block’s URL, model, and key. The label selects a configuration block; it does not deploy a Modal app. Neither block provisions model infrastructure.
+
+The proxy sends `temperature: 0.3`, `max_tokens: 2048`, `top_p: 0.9`, `stream: false`, and `reasoning_effort: "none"`, with a 120-second HTTP timeout. An endpoint must accept this request format and return text in `choices[0].message.content`. If your provider rejects an optional field such as `reasoning_effort`, adapt the request body in `server.py`.
+
+For JSON tasks, the proxy adds an instruction requesting one JSON object and attempts to parse the response. This is prompt-based JSON handling, not enforced structured-output validation. Completed `<think>...</think>` blocks are removed from returned text.
+
+### API checks
 
 ```bash
 curl http://127.0.0.1:3020/api/backends
 ```
 
-`ok: true` means the proxy reached `/v1/models` on the selected endpoint.
+This returns the selected backend, label, model, and `ok`. For a URL ending in `/chat/completions`, the probe replaces that suffix with `/models`. **`ok: true` is only a loose reachability signal:** the current probe accepts any HTTP status below 500, including 401 and 404. It does not confirm valid credentials, an available model, or successful inference.
 
-### If vLLM fails on this machine
+To test an actual completion against your configured endpoint:
 
-vLLM 0.30 can load `Qwen/Qwen3.5-9B` and then fail while FlashInfer JIT-compiles (`ninja` / GCC vs CUDA headers). Any other OpenAI-compatible server on port 8000 works with the same config. The app only needs `POST /v1/chat/completions` and `GET /v1/models`.
+```bash
+curl -X POST http://127.0.0.1:3020/api/complete \
+  -H 'Content-Type: application/json' \
+  -d '{"prompt":"Reply with one short greeting.","json":false}'
+```
 
-## Hosting
+| Route | Purpose |
+| --- | --- |
+| `GET /api/backends` | Report the configured model and probe its endpoint. |
+| `POST /api/complete` | Accept `prompt` or a `messages` array, plus optional `json: true`; return text and backend metadata. JSON requests also receive a parsed `json` field. |
+| `GET /` and asset paths | Serve files from `dist/`. |
 
-### One GPU machine (local Qwen)
+## Architecture
 
-Use this when the model should run next to the site.
+The frontend uses **vanilla JavaScript ES modules, HTML, and CSS**, bundled with **Vite**. The backend uses **FastAPI**, **Uvicorn**, **HTTPX**, and **Pydantic**. Saved plans use browser `localStorage`; there is no application database or account system.
 
-- Instance: `g5.xlarge` (A10G, 24 GB) or similar. `t3.micro` cannot run this model.
-- Image: Ubuntu Deep Learning AMI with the NVIDIA driver.
-- Disk: 200 GB or more.
-- Security group: SSH 22 from your IP, HTTP 80. Do not open 8000.
-- On the box: clone the repo, `npm ci && npm run build`, install the Python requirements, start vLLM on `127.0.0.1:8000`, then `python server.py`.
-- Put nginx on port 80 in front of 3020 if you want a normal URL. Set `proxy_read_timeout 120s`.
-- Leave `"backend": "local"`.
+```mermaid
+flowchart TD
+  subgraph Browser
+    UI["Conversation and plan"]
+    Engine["Coverage and timeline engine"]
+    AI["AI prompts and response checks"]
+    Saved["Browser saved plans"]
+    UI --> Engine
+    Engine --> UI
+    UI <--> AI
+    UI <--> Saved
+  end
+  AI <--> Proxy["FastAPI model proxy"]
+  Config["llm.config.json"] --> Proxy
+  Proxy <--> Model["Local or hosted model"]
+```
 
-GPU time is billed while the instance is running, even when nobody is chatting. Stop it when you are done.
+The browser calculates estimates and checks displayed AI prose. The Python service serves the build and forwards model requests; it does not calculate coverage or run the dollar-figure guard.
 
-### Small machine, model elsewhere
+`src/client.js` installs a compatibility bridge named `window.claude`. In the normal Vite entry point, that bridge sends requests to `/api/complete`; the name does not require an Anthropic account or Claude model. The older direct-model settings in `src/ai.js` are a fallback path, not the normal configuration switch.
 
-Use a `t3.small` (about 30 GB disk) for the site only, and set `"backend": "modal"` so Qwen stays on Modal. No GPU bill. Bedrock is not wired into `server.py`; adding it means a new backend that calls the Bedrock API instead of `/v1/chat/completions`.
+### Where AI contributes
 
-## Privacy
+| Task | Model role | Application role |
+| --- | --- | --- |
+| Natural-language intake | Extract household and financial details into JSON. | Sanitize fields, combine with the built-in parser, and show editable facts. |
+| Conversation | Answer questions and propose a supported action. | Validate and apply actions; recompute the plan in code. |
+| Plan explanation | Explain the supplied needs and coverage figures. | Supply calculated context and check displayed dollar figures. |
+| Plan insights | Select and rephrase up to three observations. | Generate the candidate observations from plan rules. |
+| Suggested questions | Suggest context-relevant follow-ups. | Filter suggestions and avoid exact repeats of previously asked questions. |
+| Advisor brief | Draft a short handoff from the plan and recent questions. | Assemble the summary and provide copy/download controls. |
 
-- Plans live in `localStorage` under `lincolnlens.plans.v1`.
-- Health answers are stripped before a plan is saved.
-- Nothing in the plan is sent to a server except the text of the current model request.
-- Do not commit `llm.config.json` when it contains a Modal or Hugging Face token. `llm.local.json` is also ignored.
+Model output can change the inputs through supported actions. Deterministic calculations make the arithmetic reproducible for a given profile; they do not guarantee that extracted facts or model explanations are correct.
 
-## License and use
+**Photo reading is not enabled in the standard build.** The source contains a document-photo flow, but the current bridge advertises no image support and does not forward the image options used by that flow. Enabling it requires implementing image transport and capability reporting, plus a compatible vision endpoint. Changing only the model name is insufficient.
 
-LincolnLens is a planning explainer. Premium ranges are illustrative class bands from the in-page engine, not carrier rates. A licensed professional still has to turn a plan into a real policy.
+## How coverage is calculated
+
+The core implementation is in [`src/engine.js`](src/engine.js), with the annuity helper in [`src/dom.js`](src/dom.js).
+
+**Coverage gap = max(0, total modeled needs − counted resources).**
+
+| Component | Current calculation |
+| --- | --- |
+| Immediate costs and other debts | Included as entered lump sums. |
+| Mortgage | Full balance, half the balance, or excluded according to the selected option. |
+| Income support | Selected share of annual income over the chosen duration, discounted as an annuity due. |
+| Education | Selected amount per child, discounted to today from age 18; children already 18 or older have no discount. The engine includes children aged 22 or younger. |
+| Childcare | Annual amount discounted over the years until the youngest child turns 13. |
+| Additional support | Recurring costs, such as care for a parent, discounted over their specified duration. |
+| Savings | Only the amount explicitly allocated to the plan reduces the gap. |
+| Existing coverage | Counts toward resources, subject to the work-coverage setting. |
+
+For annual support `P`, duration `n`, and annual real growth rate `r`, the present value is:
+
+```text
+P × ((1 − (1 + r)^(-n)) / r) × (1 + r)
+```
+
+At `r = 0`, this becomes `P × n`. Payments occur at the beginning of each modeled year. Education is discounted separately as a future lump sum. These are simplified planning assumptions, not forecasts of investment performance.
+
+Defaults are **75% income replacement**, **3% annual growth above inflation**, and **count work coverage**. The first two can be adjusted in **Behind the numbers** from 50–100% and 0–5%, respectively. The work-coverage switch excludes coverage marked solely as `work`; a combined `both` amount is not split into work and personal portions.
+
+### Coverage choices and timeline
+
+- **Essential:** lump-sum needs plus up to five years of income support, less counted resources, floored at zero and rounded to the nearest $50,000. If this reaches the balanced tier, the engine reduces it using a 65%-of-balanced rule and rounds down.
+- **Balanced:** the full positive gap rounded up to the next $50,000.
+- **More cushion:** the larger of balanced plus $100,000 or 125% of balanced rounded up to $50,000. When the gap is zero, all tiers are zero.
+
+The funding timeline starts with the selected coverage plus counted resources, pays obligations in a fixed priority order, and grows the remaining balance annually. The separate term-length projection uses simplified assumptions about needs shrinking over time, including debt and mortgage reductions; it is not a loan-amortization model.
+
+Premium bands, health classes, policy suggestions, and whole-life cash values come from hard-coded illustrative rules. They are not live carrier rates or validated underwriting results. Linked educational resources do not validate these numerical assumptions.
+
+### Dollar-figure checks
+
+`guard()` detects supported **`$`-prefixed amounts**, including forms such as `$500K`, and compares them with allowed plan figures. It accepts a difference of up to **the greater of $600 or 2% of the allowed amount**. Display helpers replace unmatched figures in checked AI prose.
+
+This is a limited consistency check. It does not verify percentages, amounts written without `$`, factual claims, or whether a matching number is used in the right context. Some stored and exported text—including the generated advisor brief—retains the original model text rather than its display-redacted version.
+
+## Data and privacy
+
+- Up to **30 plans** are saved in the current browser under `lincolnlens.plans.v1`. Records include profile data, assumptions, conversation history, recent Q&A, and scenario comparisons. There is no cross-device sync.
+- The save routine clears both people’s structured health fields and replaces answers associated with dedicated health-question nodes. **It does not comprehensively remove sensitive information from free-text chat, Q&A, or generated text.** The interface’s “health answers are never saved” wording is broader than this implementation.
+- Model requests can include extracted household facts, calculated plan figures, an estimated health class, and recent conversation turns—not only the latest message. A hosted model receives that context through the Python proxy.
+- The application does not implement server-side plan storage. Model providers and hosting infrastructure may have their own logging and retention behavior.
+- The page loads fonts from Google Fonts. Browser-local plan storage does not mean the page makes no external requests.
+- Downloaded summaries may include an estimated health class and recent questions. Review them before sharing. Deleting a browser plan does not delete exports or provider-side records.
+
+## Project map
+
+| Path | Responsibility |
+| --- | --- |
+| [`index.html`](index.html), `family.png` | Main page shell, landing content, and background image. |
+| [`src/main.js`](src/main.js), [`src/client.js`](src/client.js) | Startup and the browser-to-proxy model bridge. |
+| [`src/state.js`](src/state.js) | Profile structure, initial assumptions, shared state, and educational source links. |
+| [`src/engine.js`](src/engine.js) | Coverage math, timelines, illustrative pricing, partner profiles, and dollar checks. |
+| [`src/flow.js`](src/flow.js) | Guided questions, plan cards, scenarios, and text export. |
+| [`src/ai.js`](src/ai.js) | Prompts, parsing, chat actions, explanations, insights, and the transparency drawer. |
+| [`src/hero.js`](src/hero.js) | Landing interactions, navigation, and browser plan persistence. |
+| [`src/ui.js`](src/ui.js), [`src/dom.js`](src/dom.js), [`src/styles.css`](src/styles.css) | Widgets, plan rendering, helpers, and responsive styling. |
+| [`server.py`](server.py), [`requirements.txt`](requirements.txt) | Python web server and dependencies. |
+| [`vite.config.js`](vite.config.js), [`package.json`](package.json) | Frontend build and development commands. |
+| `llm.config.json` | Runtime endpoint selection and optional credentials; currently tracked. |
+| `dist/` | Built files served by Python; currently committed to the repository. |
+| `lincoln.html`, `product.html`, `incoming/` | Additional HTML and assembly files; not the default Vite entry point. |
+
+## Deployment and troubleshooting
+
+Host the built frontend and Python proxy together, with either a local model service or a reachable remote endpoint. The web process does not require a GPU; a self-hosted model has separate hardware requirements. Static hosting alone does not provide `/api/complete`.
+
+For a public deployment, place the Python service behind HTTPS and add access controls, request limits, and rate limiting. The repository does not include those protections, a deployment manifest, or a Modal deployment script. Keep inference credentials server-side and allow enough proxy time for model requests.
+
+| Symptom | Check |
+| --- | --- |
+| Port 3020 shows old content or fails to load the page | Run `npm run build`; Python serves `dist/`, not `src/`. |
+| The calculator works but AI uses built-in responses | Check the configured URL, model ID, credentials, and endpoint response. Try an actual completion. |
+| `ok: true` but chat fails | The probe also treats 401/404 as reachable. Check inference separately. |
+| Hosted backend returns “no endpoint” | Set the full chat-completions URL in the selected block. |
+| A provider rejects the request | Check support for the fields in `server.py`, especially `reasoning_effort`. |
+| Photo controls are missing | Expected with the standard text-only bridge. |
+| Plans disappear or differ between URLs | Storage is scoped to the browser and origin, including port. Clearing site data, private browsing, or blocked storage can affect persistence. |
+
+The available npm scripts are `dev`, `build`, and `preview`. No automated test suite or `test` script is included. After changing calculations or conversation behavior, check the guided path, edited inputs, scenario comparisons, saved-plan restore, and exported summary.
+
+## Educational resources
+
+The application links to resources configured in `src/state.js`:
+
+- [NAIC life insurance consumer resources](https://content.naic.org/consumer/life-insurance.htm)
+- [Insurance Information Institute: life insurance basics](https://www.iii.org/insurance-basics/life-insurance)
+- [Social Security survivors benefits](https://www.ssa.gov/benefits/survivors/)
+- [Social Security disability benefits](https://www.ssa.gov/benefits/disability/)
+
+These are reference links. The current implementation does not retrieve their contents at runtime or implement retrieval-augmented generation.
+
+## License
+
+No `LICENSE` file is currently included in this repository.
