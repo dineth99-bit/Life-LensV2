@@ -6,8 +6,8 @@
     "key": ""
   },
   "modal": {
-    "url": "",
+    "url": "https://psndsankalpa--ep-qwen3-5-9b-server.us-west.modal.direct/v1/chat/completions",
     "model": "Qwen/Qwen3.5-9B",
-    "key": ""
+    "key": "wk-ou5ZFz28SksaOF3iiQDUer.ws-8r6SQHGYPaymEpslgV7PRL"
   }
 }
