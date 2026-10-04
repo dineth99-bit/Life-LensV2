@@ -431,10 +431,11 @@ function contextForAI() {
   L.push(`Assumptions: income support replaces ${pct(S.A.replace)} of income; money grows ${pct(S.A.rate, 1)} a year above inflation; work coverage ${S.A.countWork ? 'is' : 'is not'} counted.`);
   return L.join('\n');
 }
-const QA_RULES = (ctx, current, opts) => `You are LincolnLens, a warm, knowledgeable assistant inside a life insurance planning app. The person can ask you anything at any point: about their plan, life insurance, money, health, how the app works, or something else entirely.
+const QA_RULES = (ctx, current, opts, latestUserMessage) => `You are LincolnLens, a warm, knowledgeable assistant inside a life insurance planning app. The person can ask you anything at any point: about their plan, life insurance, money, health, how the app works, or something else entirely.
 Reply with ONLY one JSON object and nothing else: {"reply": "...", "action": null}
 
 "reply": 1 to 4 short sentences of plain text. No markdown, no lists.
+- Answer the latest user message specifically. Do not repeat a previous assistant reply or the generic capability message.
 - About their plan: use only dollar figures that appear in PLAN FIGURES, written the same way. Never calculate new dollar amounts.
 - General questions (insurance, money, health, the app, or anything else): answer helpfully and briefly. For amounts that aren't in PLAN FIGURES, use words or percentages instead of dollar figures.
 - If they need a professional (legal, tax, medical, or buying a specific policy), say so briefly and name the right kind of professional.
@@ -451,6 +452,8 @@ Reply with ONLY one JSON object and nothing else: {"reply": "...", "action": nul
 {"type":"newPlan"}   they want to start a new plan
 {"type":"answer","value":V}   use this when their message answers the question the app is asking right now (see below)
 ${current ? `\nThe app is currently asking them: "${current}".${opts ? ` ${opts}` : ''} If their message answers it, return the "answer" action. If they ask something else instead, just answer; the question stays open.\n` : ''}
+LATEST USER MESSAGE TO ANSWER
+${latestUserMessage || '(none)'}
 If they mention suicide or self-harm, or seem to be in crisis, respond with care first, tell them they can call or text 988 (in the US) any time, and don't discuss how policies handle suicide.
 Example: {"reply":"Done. Your plan now uses your new income.","action":{"type":"update","field":"income","value":95000}}
 
@@ -1124,7 +1127,7 @@ async function askQuestion(q) {
   if (quick && quick.action && quick.action.type !== 'update' && quick.action.type !== 'coverage') { action = quick.action; reply = quick.reply || ''; }
   else if (S.ai.sample) {
     try {
-      const turns = [{ role: 'user', content: QA_RULES(contextForAI(), currentQ, S.active ? optionsForPrompt(S.active.node) : '') }, ...S.qa.slice(-8)];
+      const turns = [{ role: 'user', content: QA_RULES(contextForAI(), currentQ, S.active ? optionsForPrompt(S.active.node) : '', q) }, ...S.qa.slice(-8)];
       const out = await S.ai.sample.json(turns, { modelTier: 'quick', cache: false });
       reply = String((out && out.reply) || '').trim(); action = out && out.action && typeof out.action === 'object' ? out.action : null; via = 'claude';
     } catch (e) {

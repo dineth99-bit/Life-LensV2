@@ -97,6 +97,13 @@ def _models_url(chat_url: str) -> str:
     return chat_url
 
 
+def _safe_headers(headers: dict[str, str]) -> dict[str, str]:
+    return {
+        name: "Bearer ***" if name.lower() == "authorization" else value
+        for name, value in headers.items()
+    }
+
+
 def _probe(spec: dict) -> bool:
     if not spec["url"]:
         return False
@@ -137,26 +144,35 @@ def complete(body: CompleteIn) -> dict:
         )
     messages = body.messages or [{"role": "user", "content": body.prompt or ""}]
     if body.json:
-        messages = [
-            {"role": "system", "content": "Reply with one JSON object only. No markdown and no explanation."},
-            *messages,
-        ]
+        instruction = "Reply with one JSON object only. No markdown and no explanation."
+        if messages and messages[0].get("role") == "system":
+            messages = [
+                {"role": "system", "content": f"{instruction}\n\n{messages[0].get('content', '')}"},
+                *messages[1:],
+            ]
+        else:
+            messages = [{"role": "system", "content": instruction}, *messages]
     headers = {"Authorization": "Bearer " + spec["key"]} if spec["key"] else {}
+    request_body = {
+        "model": spec["model"],
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 2048,
+        "top_p": 0.9,
+        "stream": False,
+        "reasoning_effort": "none",
+    }
+    # print(f"[LLM request] POST {spec['url']}", flush=True)
+    # print(f"[LLM headers] {_safe_headers(headers)}", flush=True)
+    # print(f"[LLM body] {json.dumps(request_body, ensure_ascii=False)}", flush=True)
     try:
         response = httpx.post(
             spec["url"],
             headers=headers,
-            json={
-                "model": spec["model"],
-                "messages": messages,
-                "temperature": 0.3,
-                "max_tokens": 2048,
-                "top_p": 0.9,
-                "stream": False,
-                "reasoning_effort": "none",
-            },
+            json=request_body,
             timeout=120,
         )
+        print(f"[LLM response] HTTP {response.status_code}", flush=True)
         response.raise_for_status()
         text = response.json()["choices"][0]["message"]["content"].strip()
         text = re.sub(r"<think>[\s\S]*?</think>", "", text).strip()
